@@ -71,8 +71,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           >
             {icons[t.type]}
             <span className="text-sm flex-1">{t.message}</span>
-            <button onClick={() => remove(t.id)} className="text-muted hover:text-white transition-colors">
-              <X size={14} />
+            <button aria-label="Fechar notificação" onClick={() => remove(t.id)} className="text-muted hover:text-white transition-colors">
+                <X size={14} />
             </button>
           </div>
         ))}
