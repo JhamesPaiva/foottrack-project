@@ -6,27 +6,38 @@ import type {
 
 const api = axios.create({ baseURL: "/api/v1" });
 
-// Attach JWT token automatically
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("ft_token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Redirect to login on 401
 api.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err.response?.status === 401) {
+    const status = err.response?.status;
+
+    if (status === 401) {
       localStorage.removeItem("ft_token");
       localStorage.removeItem("ft_usuario");
       window.location.href = "/login";
+      return Promise.reject(err);
     }
+
+    if (status === 429) {
+      err.userMessage = "Muitas tentativas. Aguarde um momento.";
+    } else if (status === 413) {
+      err.userMessage = "Arquivo muito grande. Máximo 5MB.";
+    } else if (status === 500) {
+      err.userMessage = "Erro interno do servidor. Tente novamente.";
+    } else if (!status) {
+      err.userMessage = "Sem conexão com o servidor. Verifique se o backend está rodando.";
+    }
+
     return Promise.reject(err);
   }
 );
 
-// ─── Auth ────────────────────────────────────────────────────────────────────
 export const authApi = {
   register: (data: { usuario: string; senha: string; confirmar_senha: string }) =>
     api.post<ApiResponse<{ token: string; usuario: any }>>("/auth/register", data),
@@ -34,12 +45,10 @@ export const authApi = {
     api.post<ApiResponse<{ token: string; usuario: any }>>("/auth/login", data),
 };
 
-// ─── Dashboard ───────────────────────────────────────────────────────────────
 export const dashboardApi = {
   getResumo: () => api.get<ApiResponse<DashboardResumo>>("/dashboard"),
 };
 
-// ─── Times ───────────────────────────────────────────────────────────────────
 export const timesApi = {
   listar: () => api.get<ApiResponse<Time[]>>("/times"),
   criar: (data: Partial<Time>) => api.post<ApiResponse<Time>>("/times", data),
@@ -55,7 +64,6 @@ export const timesApi = {
   },
 };
 
-// ─── Temporadas ───────────────────────────────────────────────────────────────
 export const temporadasApi = {
   listar: (timeId: number) =>
     api.get<ApiResponse<Temporada[]>>(`/times/${timeId}/temporadas`),
@@ -67,7 +75,6 @@ export const temporadasApi = {
     api.post<ApiResponse<Temporada>>(`/temporadas/${id}/reabrir`),
 };
 
-// ─── Jogadores ───────────────────────────────────────────────────────────────
 export const jogadoresApi = {
   listar: (temporadaId: number) =>
     api.get<ApiResponse<Jogador[]>>(`/temporadas/${temporadaId}/jogadores`),
@@ -88,7 +95,6 @@ export const jogadoresApi = {
     api.get<ApiResponse<Historico[]>>(`/jogadores/${id}/historico`),
 };
 
-// ─── Adversarios ─────────────────────────────────────────────────────────────
 export const adversariosApi = {
   listar: () => api.get<ApiResponse<Adversario[]>>("/adversarios"),
   criar: (data: Partial<Adversario>) =>
@@ -105,7 +111,6 @@ export const adversariosApi = {
   },
 };
 
-// ─── Partidas ─────────────────────────────────────────────────────────────────
 export const partidasApi = {
   listar: (temporadaId: number) =>
     api.get<ApiResponse<Partida[]>>(`/temporadas/${temporadaId}/partidas`),
@@ -119,7 +124,6 @@ export const partidasApi = {
     api.get<ApiResponse<EstatisticasTime>>(`/temporadas/${temporadaId}/estatisticas`),
 };
 
-// ─── Ranking ──────────────────────────────────────────────────────────────────
 export const rankingApi = {
   getRanking: (temporadaId: number) =>
     api.get<ApiResponse<EstatisticaJogador[]>>(`/temporadas/${temporadaId}/ranking`),
@@ -129,7 +133,6 @@ export const rankingApi = {
     ),
 };
 
-// ─── Historico ────────────────────────────────────────────────────────────────
 export const historicoApi = {
   listar: () => api.get<ApiResponse<Historico[]>>("/historico"),
 };

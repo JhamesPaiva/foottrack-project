@@ -1,9 +1,16 @@
 from flask import Blueprint
-from flask_jwt_extended import jwt_required
 from app.controllers import AuthController
+from app.extensions import limiter
 
 auth_bp = Blueprint("auth", __name__)
 ctrl = AuthController()
 
-auth_bp.add_url_rule("/register", view_func=ctrl.register, methods=["POST"])
-auth_bp.add_url_rule("/login", view_func=ctrl.login, methods=["POST"])
+@auth_bp.route("/register", methods=["POST"])
+@limiter.limit("10 per hour")
+def register():
+    return ctrl.register()
+
+@auth_bp.route("/login", methods=["POST"])
+@limiter.limit("10 per minute")
+def login():
+    return ctrl.login()
