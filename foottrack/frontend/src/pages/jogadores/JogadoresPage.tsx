@@ -11,6 +11,8 @@ import Modal from "@/components/ui/Modal";
 import Avatar from "@/components/ui/Avatar";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import { SkeletonPlayerCard } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
 import { jogadoresApi } from "@/services/api";
 import { useApp } from "@/store/app";
 import { POSICOES } from "@/utils";
@@ -22,18 +24,27 @@ const FILTER_OPTIONS = [{ value: "", label: "Todos" }, ...POS_OPTIONS];
 export default function JogadoresPage() {
   const { selectedTemporada } = useApp();
   const navigate = useNavigate();
+  const toast = useToast();
   const [jogadores, setJogadores] = useState<Jogador[]>([]);
   const [search, setSearch] = useState("");
   const [filterPos, setFilterPos] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editingJogador, setEditingJogador] = useState<Jogador | null>(null);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => { if (selectedTemporada) loadJogadores(); }, [selectedTemporada]);
 
   const loadJogadores = async () => {
     if (!selectedTemporada) return;
-    const r = await jogadoresApi.listar(selectedTemporada.id);
-    setJogadores(r.data.data);
+    setLoading(true);
+    try {
+      const r = await jogadoresApi.listar(selectedTemporada.id);
+      setJogadores(r.data.data);
+    } catch {
+      toast.error("Erro ao carregar jogadores.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const filtered = jogadores.filter((j) => {
@@ -45,8 +56,13 @@ export default function JogadoresPage() {
   const handleDelete = async (id: number, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!confirm("Excluir jogador e todas as estatísticas?")) return;
-    await jogadoresApi.deletar(id);
-    loadJogadores();
+    try {
+      await jogadoresApi.deletar(id);
+      toast.success("Jogador excluído com sucesso.");
+      loadJogadores();
+    } catch {
+      toast.error("Erro ao excluir jogador.");
+    }
   };
 
   return (
@@ -97,7 +113,13 @@ export default function JogadoresPage() {
             </div>
 
             {/* Grid */}
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <SkeletonPlayerCard key={i} />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
               <EmptyState
                 icon={<User size={28} />}
                 title="Nenhum jogador encontrado"
@@ -167,13 +189,20 @@ function JogadorModal({ open, onClose, editing, temporadaId, onSaved }: {
   open: boolean; onClose: () => void; editing: Jogador | null;
   temporadaId?: number; onSaved: () => void;
 }) {
+  const toast = useToast();
   const { register, handleSubmit, reset, formState: { errors, isSubmitting } } = useForm<{ nome: string; posicao: Posicao }>();
   useEffect(() => { if (open) reset({ nome: editing?.nome || "", posicao: editing?.posicao }); }, [open, editing]);
 
   const onSubmit = async (data: { nome: string; posicao: Posicao }) => {
-    if (editing) await jogadoresApi.atualizar(editing.id, data);
-    else if (temporadaId) await jogadoresApi.criar(temporadaId, data);
-    onSaved(); onClose();
+    try {
+      if (editing) await jogadoresApi.atualizar(editing.id, data);
+      else if (temporadaId) await jogadoresApi.criar(temporadaId, data);
+      toast.success(editing ? "Jogador atualizado!" : "Jogador adicionado!");
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Erro ao salvar jogador.");
+    }
   };
 
   return (

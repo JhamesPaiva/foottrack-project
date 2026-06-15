@@ -8,6 +8,9 @@ import Input from "@/components/ui/Input";
 import Modal from "@/components/ui/Modal";
 import Badge from "@/components/ui/Badge";
 import EmptyState from "@/components/ui/EmptyState";
+import Pagination from "@/components/ui/Pagination";
+import { SkeletonMatchCard } from "@/components/ui/Skeleton";
+import { useToast } from "@/components/ui/Toast";
 import { partidasApi, adversariosApi, jogadoresApi } from "@/services/api";
 import { useApp } from "@/store/app";
 import { formatDate, getResultadoLabel } from "@/utils";
@@ -20,28 +23,48 @@ const FILTER_TABS = [
   { label: "Derrotas", val: "derrota" },
 ];
 
+const PER_PAGE = 10;
+
 export default function PartidasPage() {
   const { selectedTemporada, selectedTime } = useApp();
+  const toast = useToast();
   const [partidas, setPartidas] = useState<Partida[]>([]);
   const [filter, setFilter] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [page, setPage] = useState(1);
 
   useEffect(() => { if (selectedTemporada) loadPartidas(); }, [selectedTemporada]);
+  useEffect(() => { setPage(1); }, [filter]);
 
   const loadPartidas = async () => {
     if (!selectedTemporada) return;
-    const r = await partidasApi.listar(selectedTemporada.id);
-    setPartidas(r.data.data);
+    setLoading(true);
+    try {
+      const r = await partidasApi.listar(selectedTemporada.id);
+      setPartidas(r.data.data);
+    } catch {
+      toast.error("Erro ao carregar partidas.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm("Excluir partida? As estatísticas dos jogadores serão revertidas.")) return;
-    await partidasApi.deletar(id);
-    loadPartidas();
+    try {
+      await partidasApi.deletar(id);
+      toast.success("Partida excluída com sucesso.");
+      loadPartidas();
+    } catch {
+      toast.error("Erro ao excluir partida.");
+    }
   };
 
   const filtered = filter ? partidas.filter((p) => p.resultado === filter) : partidas;
+  const totalPages = Math.ceil(filtered.length / PER_PAGE);
+  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
 
   const nomeTime = selectedTime?.nome ?? "Meu Time";
   const iniciaisTime = selectedTime?.nome?.slice(0, 2).toUpperCase() ?? "MT";
@@ -61,21 +84,32 @@ export default function PartidasPage() {
           <EmptyState icon="⚽" title="Nenhuma temporada selecionada" description="Configure um time em Configurações." />
         ) : (
           <>
-            <div className="flex gap-1 bg-surface2 rounded-xl p-1 w-fit mb-6">
-              {FILTER_TABS.map((t) => (
-                <button
-                  key={t.val}
-                  onClick={() => setFilter(t.val)}
-                  className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
-                    filter === t.val ? "bg-surface text-white" : "text-muted hover:text-white"
-                  }`}
-                >
-                  {t.label}
-                </button>
-              ))}
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex gap-1 bg-surface2 rounded-xl p-1 w-fit">
+                {FILTER_TABS.map((t) => (
+                  <button
+                    key={t.val}
+                    onClick={() => setFilter(t.val)}
+                    className={`px-4 py-1.5 rounded-lg text-sm font-semibold transition-colors ${
+                      filter === t.val ? "bg-surface text-white" : "text-muted hover:text-white"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <span className="text-xs text-muted">
+                {filtered.length} partida{filtered.length !== 1 ? "s" : ""}
+              </span>
             </div>
 
-            {filtered.length === 0 ? (
+            {loading ? (
+              <div className="space-y-3">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <SkeletonMatchCard key={i} />
+                ))}
+              </div>
+            ) : filtered.length === 0 ? (
               <EmptyState
                 icon="🏟️"
                 title="Nenhuma partida registrada"
@@ -83,90 +117,93 @@ export default function PartidasPage() {
                 action={<Button size="sm" icon={<Plus size={14} />} onClick={() => setShowModal(true)}>Registrar Partida</Button>}
               />
             ) : (
-              <div className="space-y-3">
-                {filtered.map((p) => (
-                  <Card key={p.id} className="overflow-hidden">
-                    <div
-                      className="p-4 grid items-center gap-4 cursor-pointer hover:bg-white/[0.02]"
-                      style={{ gridTemplateColumns: "1fr auto 1fr auto" }}
-                      onClick={() => setExpanded(expanded === p.id ? null : p.id)}
-                    >
-                      {/* Time da esquerda */}
-                      <div className={`flex items-center gap-3 ${!p.mandante ? "flex-row-reverse text-right" : ""}`}>
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center text-xs font-black flex-shrink-0">
-                          {p.mandante ? iniciaisTime : (p.adversario?.nome?.slice(0, 2).toUpperCase() ?? "AD")}
-                        </div>
-                        <div>
-                          <div className="font-bold text-sm">
-                            {p.mandante ? nomeTime : (p.adversario?.nome ?? "Adversário")}
+              <>
+                <div className="space-y-3">
+                  {paginated.map((p) => (
+                    <Card key={p.id} className="overflow-hidden">
+                      <div
+                        className="p-4 grid items-center gap-4 cursor-pointer hover:bg-white/[0.02]"
+                        style={{ gridTemplateColumns: "1fr auto 1fr auto" }}
+                        onClick={() => setExpanded(expanded === p.id ? null : p.id)}
+                      >
+                        {/* Time da esquerda */}
+                        <div className={`flex items-center gap-3 ${!p.mandante ? "flex-row-reverse text-right" : ""}`}>
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center text-xs font-black flex-shrink-0">
+                            {p.mandante ? iniciaisTime : (p.adversario?.nome?.slice(0, 2).toUpperCase() ?? "AD")}
                           </div>
-                          <div className="text-xs text-muted">{p.competicao}</div>
-                        </div>
-                      </div>
-
-                      {/* Placar */}
-                      <div className="text-center min-w-[100px]">
-                        <div className={`font-condensed font-black text-3xl ${
-                          p.resultado === "vitoria" ? "text-primary" :
-                          p.resultado === "empate" ? "text-yellow-400" : "text-red-400"
-                        }`}>
-                          {p.mandante ? `${p.gols_pro} - ${p.gols_contra}` : `${p.gols_contra} - ${p.gols_pro}`}
-                        </div>
-                        <div className="text-xs text-muted">{formatDate(p.data_partida)}</div>
-                        <Badge
-                          variant={p.resultado === "vitoria" ? "primary" : p.resultado === "empate" ? "yellow" : "red"}
-                          className="mt-1"
-                        >
-                          {getResultadoLabel(p.resultado)}
-                        </Badge>
-                      </div>
-
-                      {/* Time da direita */}
-                      <div className={`flex items-center gap-3 ${p.mandante ? "flex-row-reverse text-right" : ""}`}>
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-xs font-black flex-shrink-0">
-                          {p.mandante ? (p.adversario?.nome?.slice(0, 2).toUpperCase() ?? "AD") : iniciaisTime}
-                        </div>
-                        <div className={p.mandante ? "text-right" : ""}>
-                          <div className="font-bold text-sm">
-                            {p.mandante ? (p.adversario?.nome ?? "Adversário") : nomeTime}
-                          </div>
-                          <div className="text-xs text-muted">{p.local}</div>
-                        </div>
-                      </div>
-
-                      {/* Ações */}
-                      <div className="flex items-center gap-2">
-                        {expanded === p.id ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
-                        <button
-                          className="text-muted hover:text-red-400 transition-colors p-1"
-                          onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
-                        >
-                          <Trash2 size={13} />
-                        </button>
-                      </div>
-                    </div>
-
-                    {expanded === p.id && p.estatisticas && p.estatisticas.length > 0 && (
-                      <div className="border-t border-white/[0.06] px-5 py-4">
-                        <p className="text-xs font-bold text-muted uppercase tracking-widest mb-3">Estatísticas dos Jogadores</p>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
-                          {p.estatisticas.filter((e) => e.participou).map((ep) => (
-                            <div key={ep.id} className="flex items-center gap-2 text-sm">
-                              <div className="font-medium flex-1">{ep.jogador?.nome ?? `#${ep.jogador_id}`}</div>
-                              <div className="flex gap-2 text-xs">
-                                {ep.gols > 0 && <span className="text-primary">⚽{ep.gols}</span>}
-                                {ep.assistencias > 0 && <span className="text-blue-400">🅰️{ep.assistencias}</span>}
-                                {ep.cartoes_amarelos > 0 && <span className="text-yellow-400">🟨{ep.cartoes_amarelos}</span>}
-                                {ep.cartoes_vermelhos > 0 && <span className="text-red-400">🟥</span>}
-                              </div>
+                          <div>
+                            <div className="font-bold text-sm">
+                              {p.mandante ? nomeTime : (p.adversario?.nome ?? "Adversário")}
                             </div>
-                          ))}
+                            <div className="text-xs text-muted">{p.competicao}</div>
+                          </div>
+                        </div>
+
+                        {/* Placar */}
+                        <div className="text-center min-w-[100px]">
+                          <div className={`font-condensed font-black text-3xl ${
+                            p.resultado === "vitoria" ? "text-primary" :
+                            p.resultado === "empate" ? "text-yellow-400" : "text-red-400"
+                          }`}>
+                            {p.mandante ? `${p.gols_pro} - ${p.gols_contra}` : `${p.gols_contra} - ${p.gols_pro}`}
+                          </div>
+                          <div className="text-xs text-muted">{formatDate(p.data_partida)}</div>
+                          <Badge
+                            variant={p.resultado === "vitoria" ? "primary" : p.resultado === "empate" ? "yellow" : "red"}
+                            className="mt-1"
+                          >
+                            {getResultadoLabel(p.resultado)}
+                          </Badge>
+                        </div>
+
+                        {/* Time da direita */}
+                        <div className={`flex items-center gap-3 ${p.mandante ? "flex-row-reverse text-right" : ""}`}>
+                          <div className="w-10 h-10 rounded-full bg-gradient-to-br from-red-600 to-red-800 flex items-center justify-center text-xs font-black flex-shrink-0">
+                            {p.mandante ? (p.adversario?.nome?.slice(0, 2).toUpperCase() ?? "AD") : iniciaisTime}
+                          </div>
+                          <div className={p.mandante ? "text-right" : ""}>
+                            <div className="font-bold text-sm">
+                              {p.mandante ? (p.adversario?.nome ?? "Adversário") : nomeTime}
+                            </div>
+                            <div className="text-xs text-muted">{p.local}</div>
+                          </div>
+                        </div>
+
+                        {/* Ações */}
+                        <div className="flex items-center gap-2">
+                          {expanded === p.id ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
+                          <button
+                            className="text-muted hover:text-red-400 transition-colors p-1"
+                            onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </div>
                       </div>
-                    )}
-                  </Card>
-                ))}
-              </div>
+
+                      {expanded === p.id && p.estatisticas && p.estatisticas.length > 0 && (
+                        <div className="border-t border-white/[0.06] px-5 py-4">
+                          <p className="text-xs font-bold text-muted uppercase tracking-widest mb-3">Estatísticas dos Jogadores</p>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                            {p.estatisticas.filter((e) => e.participou).map((ep) => (
+                              <div key={ep.id} className="flex items-center gap-2 text-sm">
+                                <div className="font-medium flex-1">{ep.jogador?.nome ?? `#${ep.jogador_id}`}</div>
+                                <div className="flex gap-2 text-xs">
+                                  {ep.gols > 0 && <span className="text-primary">⚽{ep.gols}</span>}
+                                  {ep.assistencias > 0 && <span className="text-blue-400">🅰️{ep.assistencias}</span>}
+                                  {ep.cartoes_amarelos > 0 && <span className="text-yellow-400">🟨{ep.cartoes_amarelos}</span>}
+                                  {ep.cartoes_vermelhos > 0 && <span className="text-red-400">🟥</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </Card>
+                  ))}
+                </div>
+                <Pagination page={page} totalPages={totalPages} onPageChange={setPage} />
+              </>
             )}
           </>
         )}
@@ -271,6 +308,7 @@ function PartidaModal({ open, onClose, temporadaId, onSaved }: {
   open: boolean; onClose: () => void;
   temporadaId?: number; onSaved: () => void;
 }) {
+  const toast = useToast();
   const [adversarios, setAdversarios] = useState<Adversario[]>([]);
   const [jogadores, setJogadores] = useState<Jogador[]>([]);
   const [adversarioNome, setAdversarioNome] = useState("");
@@ -300,33 +338,38 @@ function PartidaModal({ open, onClose, temporadaId, onSaved }: {
   const onSubmit = async (data: PartidaFormData) => {
     if (!temporadaId) return;
     if (!adversarioNome.trim()) {
-      alert("Informe o nome do adversário.");
+      toast.warning("Informe o nome do adversário.");
       return;
     }
 
-    let adversario = adversarios.find(
-      (a) => a.nome.toLowerCase() === adversarioNome.trim().toLowerCase()
-    );
-    if (!adversario) {
-      const r = await adversariosApi.criar({ nome: adversarioNome.trim() });
-      adversario = r.data.data;
-    }
+    try {
+      let adversario = adversarios.find(
+        (a) => a.nome.toLowerCase() === adversarioNome.trim().toLowerCase()
+      );
+      if (!adversario) {
+        const r = await adversariosApi.criar({ nome: adversarioNome.trim() });
+        adversario = r.data.data;
+      }
 
-    await partidasApi.criar(temporadaId, {
-      ...data,
-      adversario_id: adversario.id,
-      gols_pro: Number(data.gols_pro),
-      gols_contra: Number(data.gols_contra),
-      estatisticas: data.estatisticas.map((e) => ({
-        ...e,
-        gols: Number(e.gols),
-        assistencias: Number(e.assistencias),
-        cartoes_amarelos: Number(e.cartoes_amarelos),
-        cartoes_vermelhos: Number(e.cartoes_vermelhos),
-      })),
-    });
-    onSaved();
-    onClose();
+      await partidasApi.criar(temporadaId, {
+        ...data,
+        adversario_id: adversario.id,
+        gols_pro: Number(data.gols_pro),
+        gols_contra: Number(data.gols_contra),
+        estatisticas: data.estatisticas.map((e) => ({
+          ...e,
+          gols: Number(e.gols),
+          assistencias: Number(e.assistencias),
+          cartoes_amarelos: Number(e.cartoes_amarelos),
+          cartoes_vermelhos: Number(e.cartoes_vermelhos),
+        })),
+      });
+      toast.success("Partida registrada com sucesso!");
+      onSaved();
+      onClose();
+    } catch (err: any) {
+      toast.error(err.response?.data?.message || "Erro ao registrar partida.");
+    }
   };
 
   return (
