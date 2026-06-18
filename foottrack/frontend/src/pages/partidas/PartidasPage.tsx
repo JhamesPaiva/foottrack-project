@@ -173,6 +173,7 @@ export default function PartidasPage() {
                         <div className="flex items-center gap-2">
                           {expanded === p.id ? <ChevronUp size={14} className="text-muted" /> : <ChevronDown size={14} className="text-muted" />}
                           <button
+                            aria-label="Excluir partida"
                             className="text-muted hover:text-red-400 transition-colors p-1"
                             onClick={(e) => { e.stopPropagation(); handleDelete(p.id); }}
                           >
