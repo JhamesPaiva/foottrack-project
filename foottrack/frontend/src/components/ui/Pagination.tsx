@@ -17,9 +17,11 @@ export default function Pagination({ page, totalPages, onPageChange }: Paginatio
 
   return (
     <div className="flex items-center justify-center gap-1 mt-6">
+      {/* Botão Voltar com aria-label corrigido */}
       <button
         onClick={() => onPageChange(page - 1)}
         disabled={page === 1}
+        aria-label="Página anterior"
         className="w-8 h-8 rounded-lg bg-surface2 border border-white/10 flex items-center justify-center text-muted hover:text-white hover:border-white/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <ChevronLeft size={14} />
@@ -48,9 +50,11 @@ export default function Pagination({ page, totalPages, onPageChange }: Paginatio
         );
       })}
 
+      {/* Botão Avançar com aria-label corrigido */}
       <button
         onClick={() => onPageChange(page + 1)}
         disabled={page === totalPages}
+        aria-label="Próxima página"
         className="w-8 h-8 rounded-lg bg-surface2 border border-white/10 flex items-center justify-center text-muted hover:text-white hover:border-white/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
       >
         <ChevronRight size={14} />
